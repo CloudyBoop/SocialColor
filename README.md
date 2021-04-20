@@ -1,5 +1,5 @@
 # SocialColor
-idk
+VRChat mod that shows social trust rank colour on player's displaynames on social list.
 
 # preview
-![ah](https://cdn.discordapp.com/attachments/826228695424958514/831314013266772019/VRChat_XXxP187ATM.png)
+![ah](https://i.imgur.com/r6G97DA.png)
