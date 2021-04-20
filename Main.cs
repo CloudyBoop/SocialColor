@@ -1,71 +1,166 @@
-﻿using System;
+﻿using Harmony;
+using MelonLoader;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Reflection;
-using HarmonyLib;
 using UnityEngine;
-using UnityEngine.UI;
+using VRC;
 using VRC.Core;
-using System.Collections;
-namespace SocialColor
+
+namespace SocialTrustColor
 {
-    public class Main : MelonLoader.MelonMod
+    public class Main : MelonMod
     {
-        private static HarmonyMethod GetPatch(string name) => new HarmonyMethod(typeof(Main).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic));
+        private static MelonPreferences_Category socialTrustColor;
+        private static MelonPreferences_Entry<bool> Enabled;
         public override void OnApplicationStart()
         {
-            harmonyInstance.Patch(
-                typeof(UiUserList).GetMethods().Where(x =>
-                    x.GetParameters().Length == 2 &&
-                    x.GetParameters().First().ParameterType == typeof(VRCUiContentButton)).FirstOrDefault(),
-                GetPatch("A"));
-        }
-        private static bool A(VRCUiContentButton __0, Il2CppSystem.Object __1)
-        {
-            try
-            {
-                APIUser oof = __1.Cast<APIUser>();
-                if (oof.tags.Contains("admin_moderator"))
-                {
-                    __0.field_Public_Text_0.color = Color.red;
-                }
-                else if (oof.tags.Contains("system_legend"))
-                {
-                    __0.field_Public_Text_0.color = new Color(1f, 1f, 1f);
-                }
-                else if (oof.tags.Contains("system_trust_legend"))
-                {
-                    __0.field_Public_Text_0.color = new Color(1f, 1f, 0f);
-                }
-                else if (oof.tags.Contains("system_trust_veteran"))
-                {
-                    __0.field_Public_Text_0.color = new Color(0.5f, 0.25f, 0.9f);
-                }
-                else if (oof.tags.Contains("system_trust_trusted"))
-                {
-                    __0.field_Public_Text_0.color = new Color(1, 0.48f, 0);
-                }
-                else if (oof.tags.Contains("system_trust_known"))
-                {
-                    __0.field_Public_Text_0.color = new Color(0.17f, 0.81f, 0.36f);
-                }
-                else if (oof.tags.Contains("system_trust_basic"))
-                {
-                    __0.field_Public_Text_0.color = new Color(0.09f, 0.47f, 1f);
-                }
-                else
-                {
-                    __0.field_Public_Text_0.color = Color.grey;
-                }
-            }
-            catch
-            {
-                //oof
-            }
-            return true;
+            Harmony.Patch(typeof(UiUserList).GetMethod(nameof(UiUserList.Method_Protected_Virtual_Void_VRCUiContentButton_Object_1)),
+                null, postfix: new HarmonyMethod(typeof(Main).GetMethod((nameof(SetPickerContentFromApiModelPatch)), BindingFlags.Static | BindingFlags.Public)));
+
+            Harmony.Patch(typeof(NetworkManager).GetMethod(nameof(NetworkManager.Method_Public_Void_Player_1)),
+                null, postfix: new HarmonyMethod(typeof(Main).GetMethod((nameof(OnPlayerJoinedPatch)), BindingFlags.Static | BindingFlags.Public)));
+
+            socialTrustColor = MelonPreferences.CreateCategory("SocialTrustColor");
+            Enabled = (MelonPreferences_Entry<bool>)socialTrustColor.CreateEntry("Enabled", true, "Decides if mod is enabled by default");
         }
 
+
+        private static void SetPickerContentFromApiModelPatch(ref VRCUiContentButton __0, ref Il2CppSystem.Object __1)
+        {
+            APIUser user = __1.Cast<APIUser>();
+            var apiUser = PlayerWrappers.CachedApiUsers.Find(x => x.id == user.id) ?? user;
+            if (Enabled.Value)
+                __0.field_Public_Text_0.color = GetTrustColor(apiUser);
+            else
+                __0.field_Public_Text_0.color = new Color(0.4139273f, 0.8854161f, 0.9705882f);
+        }
+
+        private static void OnPlayerJoinedPatch(ref Player __0)
+        {
+            FetchAPIUserOnJoined(ref __0);
+        }
+
+        private static void FetchAPIUserOnJoined(ref Player __0)
+        {
+            var apiUser = __0.field_Private_APIUser_0;
+
+            if (PlayerWrappers.CachedApiUsers.Exists(x => x.id == apiUser.id))
+                return;
+
+            APIUser.FetchUser(apiUser.id, new Action<APIUser>(user =>
+            {
+                PlayerWrappers.CachedApiUsers.Add(user);
+            }), new Action<string>(error =>
+            {
+                MelonLogger.Error($"Could not fetch APIUser object of {apiUser.displayName}-{apiUser.id}");
+            }));
+        }
+
+        private static Color GetTrustColor(APIUser apiUser)
+        {
+            switch (PlayerWrappers.GetUserTrustRank(apiUser))
+            {
+                case PlayerWrappers.TrustRanks.Admin:
+                    return RGBColor(255, 0, 0);
+
+                case PlayerWrappers.TrustRanks.Legendary:
+                    return RGBColor(255, 105, 180);
+
+                case PlayerWrappers.TrustRanks.Veteran:
+                    return RGBColor(180, 105, 255);
+
+                case PlayerWrappers.TrustRanks.Trusted:
+                    return RGBColor(180, 105, 255);
+
+                case PlayerWrappers.TrustRanks.Known:
+                    return RGBColor(255, 123, 66);
+
+                case PlayerWrappers.TrustRanks.User:
+                    return RGBColor(43, 207, 92);
+
+                case PlayerWrappers.TrustRanks.New:
+                    return RGBColor(0, 237, 255);
+
+                case PlayerWrappers.TrustRanks.Visitor:
+                    return RGBColor(255, 255, 255);
+            }
+            return new Color(0.4139273f, 0.8854161f, 0.9705882f);
+        }
+
+        private static Color RGBColor(float r, float g, float b)
+        {
+            if (r > 255)
+                r = 255f;
+
+            if (g > 255)
+                g = 255f;
+
+            if (b > 255)
+                b = 255f;
+
+            r /= 255f;
+            g /= 255f;
+            b /= 255f;
+
+            return new Color(r, g, b);
+        }
     }
+
+    static class PlayerWrappers
+    {
+        public static List<APIUser> CachedApiUsers = new List<APIUser>();
+        public static TrustRanks GetUserTrustRank(this APIUser user)
+        {
+            if (user != null)
+            {
+                if (user.developerType == APIUser.DeveloperType.Internal) // admin user
+                {
+                    return TrustRanks.Admin;
+                }
+                if (user.HasTag("system_legend")) // legend user
+                {
+                    return TrustRanks.Legendary;
+                }
+                if (user.hasLegendTrustLevel) // veteran user
+                {
+                    return TrustRanks.Veteran;
+                }
+                if (user.hasVeteranTrustLevel) // trusted user
+                {
+                    return TrustRanks.Trusted;
+                }
+                if (user.hasTrustedTrustLevel) // known user 
+                {
+                    return TrustRanks.Known;
+                }
+                if (user.hasKnownTrustLevel) // user user
+                {
+                    return TrustRanks.User;
+                }
+                if (user.hasBasicTrustLevel) // new user
+                {
+                    return TrustRanks.New;
+                }
+                if (user.HasTag(string.Empty) && !user.canPublishAvatars) // visitor user
+                {
+                    return TrustRanks.Visitor;
+                }
+            }
+            return TrustRanks.Visitor;
+        }
+
+        public enum TrustRanks
+        {
+            Admin,
+            Legendary,
+            Veteran,
+            Trusted,
+            Known,
+            User,
+            New,
+            Visitor
+        }
+    }
+
 }
