@@ -15,11 +15,11 @@ namespace SocialTrustColor
         private static MelonPreferences_Entry<bool> Enabled;
         public override void OnApplicationStart()
         {
-            Harmony.Patch(typeof(UiUserList).GetMethod(nameof(UiUserList.Method_Protected_Virtual_Void_VRCUiContentButton_Object_1)),
-                null, postfix: new HarmonyMethod(typeof(Main).GetMethod((nameof(SetPickerContentFromApiModelPatch)), BindingFlags.Static | BindingFlags.Public)));
+           Harmony.Patch(typeof(UiUserList).GetMethod(nameof(UiUserList.Method_Protected_Virtual_Void_VRCUiContentButton_Object_1)),
+                new HarmonyMethod(typeof(Main).GetMethod(nameof(SetPickerContentFromApiModelPatch), BindingFlags.Static | BindingFlags.NonPublic)), null, null);
 
             Harmony.Patch(typeof(NetworkManager).GetMethod(nameof(NetworkManager.Method_Public_Void_Player_1)),
-                null, postfix: new HarmonyMethod(typeof(Main).GetMethod((nameof(OnPlayerJoinedPatch)), BindingFlags.Static | BindingFlags.Public)));
+                new HarmonyMethod(typeof(Main).GetMethod(nameof(OnPlayerJoinedPatch), BindingFlags.Static | BindingFlags.NonPublic)), null, null);
 
             socialTrustColor = MelonPreferences.CreateCategory("SocialTrustColor");
             Enabled = (MelonPreferences_Entry<bool>)socialTrustColor.CreateEntry("Enabled", true, "Decides if mod is enabled by default");
